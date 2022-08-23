@@ -3,13 +3,20 @@
 
 ## Table of Contents
 1. [Installation](#installation)
-2. [Supports](#supports)
-3. [References](#references)
+1. [Local dev setup](#local-dev-setup)
+1. [Supports](#supports)
+1. [References](#references)
 
 ### Installation
 - Install Node.js
   - Node.js is a prerequisite and have to be installed on the server.
+
+### Local dev setup
+#### Prerequisite
 - [ngrok](https://ngrok.com/) to put localhost on the internet
+- Create a `.env` file or copy over the `.env.local` file and update the following information
+  - Update database url, since its using sqlite. You can put `file:./dev.db`
+  - authorization should be `username:password` that is configured at the IDP scim integration level
 
 ### Supports
 - Okta

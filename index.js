@@ -31,6 +31,11 @@ const requestParser = (req, res, next) => {
         if (query?.filter) {
             req.query.filter = parse(query.filter);
         }
+
+        if (!query?.startIndex) {
+            query.startIndex = 1;
+        }
+
         let requestBody = '';
         if (['get', 'delete'].includes(method.toLowerCase())) {
             return next();
@@ -55,7 +60,7 @@ const requestParser = (req, res, next) => {
 app.use(morgan('combined'));
 
 // defining an endpoint to return all ads
-app.use('/scim/v2', [isAuthorizedUser, requestParser], routes);
+app.use('/scim/v2', [requestParser], routes);
 
 // starting the server
 app.listen(port, () => {

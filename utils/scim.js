@@ -54,7 +54,7 @@ const createSCIMGroupList = (resources, startIndex) => {
     return scimResource;
 };
 
-const createSCIMGroup = (group) => {
+const createSCIMGroup = (group, excludedAttributes) => {
     let scimResource = {
         schemas: ['urn:ietf:params:scim:schemas:core:2.0:Group'],
         id: group?.id,
@@ -64,6 +64,8 @@ const createSCIMGroup = (group) => {
             resourceType: 'Group',
         },
     };
+    delete scimResource[excludedAttributes];
+
     return scimResource;
 };
 

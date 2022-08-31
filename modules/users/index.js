@@ -19,7 +19,12 @@ router.get('/', async (req, res) => {
         const { count, filter } = query;
 
         let where = {};
-        if (filter && filter.op === 'eq' && filter.attrPath === 'userName') {
+        if (
+            filter &&
+            filter.op &&
+            filter.op.toLowerCase() === 'eq' &&
+            filter.attrPath === 'userName'
+        ) {
             where['email'] = filter.compValue;
         }
 
@@ -33,7 +38,7 @@ router.get('/', async (req, res) => {
         ]);
 
         if (!users) {
-            res.status(204).send();
+            return res.status(404).send();
         }
 
         let resources = [];
@@ -41,11 +46,11 @@ router.get('/', async (req, res) => {
             resources.push(createSCIMUser(user));
         }
 
-        res.send(createSCIMUserList(resources, query.startIndex, totalUser));
+        return res.send(
+            createSCIMUserList(resources, query.startIndex, totalUser)
+        );
     } catch (error) {
-        return res
-            .status(500)
-            .send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -64,11 +69,11 @@ router.get('/:userId', async (req, res) => {
             },
         });
         if (!user) {
-            res.status(204).send();
+            return res.status(404).send();
         }
-        res.send(createSCIMUser(user));
+        return res.send(createSCIMUser(user));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -79,10 +84,11 @@ router.get('/:userId', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const { body } = req;
-        const primaryEmail = body.emails.find((r) => r.primary);
+        const primaryEmail =
+            body.emails?.find((r) => r.primary).value || body.userName;
         const userCount = await prisma.users.count({
             where: {
-                email: primaryEmail.value,
+                email: primaryEmail,
             },
         });
 
@@ -94,16 +100,16 @@ router.post('/', async (req, res) => {
 
         const user = await prisma.users.create({
             data: {
-                firstName: body.name.givenName,
-                lastName: body.name.familyName,
-                email: primaryEmail.value,
+                firstName: body.name?.givenName || body.displayName,
+                lastName: body.name?.familyName || body.displayName,
+                email: primaryEmail,
                 active: body.active,
             },
         });
 
-        res.send(createSCIMUser(user));
+        return res.send(createSCIMUser(user));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -121,9 +127,13 @@ router.patch('/:userId', async (req, res) => {
         let data = {};
 
         for (const operations of body['Operations']) {
-            if (operations.op === 'replace') {
+            if (operations.op && operations.op.toLowerCase() === 'replace') {
                 if (typeof operations.value.active === 'boolean') {
                     data.active = operations.value.active;
+                }
+
+                if (operations.path === 'displayName') {
+                    data.firstName = operations.value;
                 }
             }
         }
@@ -140,7 +150,7 @@ router.patch('/:userId', async (req, res) => {
 
         throw new Error('No operations found');
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -154,23 +164,24 @@ router.put('/:userId', async (req, res) => {
             params: { userId },
             body,
         } = req;
-        const primaryEmail = body.emails.find((r) => r.primary);
+        const primaryEmail =
+            body.emails?.find((r) => r.primary).value || body.displayName;
 
         const user = await prisma.users.update({
             where: {
                 id: userId,
             },
             data: {
-                firstName: body.name.givenName,
-                lastName: body.name.familyName,
-                email: primaryEmail.value,
+                firstName: body.name?.givenName || body.displayName,
+                lastName: body.name?.familyName || body.displayName,
+                email: primaryEmail,
                 active: body.active,
             },
         });
 
-        res.send(createSCIMUser(user));
+        return res.send(createSCIMUser(user));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -187,7 +198,7 @@ router.delete('/:userId', async (req, res) => {
         });
         return res.status(204).send();
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 

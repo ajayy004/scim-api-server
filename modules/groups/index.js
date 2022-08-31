@@ -17,20 +17,39 @@ const prisma = new PrismaClient();
 router.get('/', async (req, res) => {
     try {
         const { query = {} } = req;
+        const { filter, excludedAttributes } = query;
+        let where = {};
+        if (
+            filter &&
+            filter.op &&
+            filter.op.toLowerCase() === 'eq' &&
+            filter.attrPath === 'userName'
+        ) {
+            where['email'] = filter.compValue;
+        } else if (
+            filter &&
+            filter.op &&
+            filter.op.toLowerCase() === 'eq' &&
+            filter.attrPath === 'displayName'
+        ) {
+            where['name'] = filter.compValue;
+        }
+
         const groups = await prisma.groups.findMany({
             skip: parseInt(query?.startIndex || 1, 10) - 1,
             take: parseInt(query?.count || 100, 10),
+            where,
         });
         if (!groups) {
-            res.status(204).send();
+            return res.status(404).send();
         }
         let resources = [];
         for (const group of groups) {
-            resources.push(createSCIMGroup(group));
+            resources.push(createSCIMGroup(group, excludedAttributes));
         }
-        res.send(createSCIMGroupList(resources, query.startIndex));
+        return res.send(createSCIMGroupList(resources, query.startIndex));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -42,6 +61,7 @@ router.get('/:groupId', async (req, res) => {
     try {
         const {
             params: { groupId },
+            query: { excludedAttributes },
         } = req;
         const group = await prisma.groups.findUnique({
             where: {
@@ -49,11 +69,11 @@ router.get('/:groupId', async (req, res) => {
             },
         });
         if (!group) {
-            res.status(204).send();
+            return res.status(404).send();
         }
-        res.send(createSCIMGroup(group));
+        return res.send(createSCIMGroup(group, excludedAttributes));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -69,9 +89,9 @@ router.post('/', async (req, res) => {
                 name: body.displayName,
             },
         });
-        res.send(createSCIMGroup(group));
+        return res.send(createSCIMGroup(group));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -89,7 +109,7 @@ router.patch('/:groupId', async (req, res) => {
         let events = [];
 
         for (const operation of body['Operations']) {
-            if (operation.op === 'replace') {
+            if (operation.op && operation.op.toLowerCase() === 'replace') {
                 if (!operation.path) {
                     events.push(
                         prisma.groups.update({
@@ -102,7 +122,24 @@ router.patch('/:groupId', async (req, res) => {
                         })
                     );
                 }
-            } else if (operation.op === 'add' && operation.path === 'members') {
+
+                if (operation.path === 'displayName') {
+                    events.push(
+                        prisma.groups.update({
+                            where: {
+                                id: groupId,
+                            },
+                            data: {
+                                name: operation.value,
+                            },
+                        })
+                    );
+                }
+            } else if (
+                operation.op &&
+                operation.op.toLowerCase() === 'add' &&
+                operation.path === 'members'
+            ) {
                 for (const row of operation.value) {
                     events.push(
                         prisma.membership.create({
@@ -114,7 +151,10 @@ router.patch('/:groupId', async (req, res) => {
                         })
                     );
                 }
-            } else if (operation.op === 'remove') {
+            } else if (
+                operation.op &&
+                operation.op.toLowerCase() === 'remove'
+            ) {
                 const { attrPath, valFilter } = parse(operation.path);
                 console.log(valFilter);
                 if (attrPath === 'members') {
@@ -133,11 +173,11 @@ router.patch('/:groupId', async (req, res) => {
         const [group] = await Promise.all(events);
 
         if (!group) {
-            res.status(204).send();
+            return res.status(404).send();
         }
-        res.send(createSCIMGroup(group));
+        return res.send(createSCIMGroup(group));
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -151,7 +191,7 @@ router.put('/:groupId', async (req, res) => {
 
         let operation = body['Operations'][0]['op'];
 
-        if (operation === 'replace') {
+        if (operation && operation.toLowerCase() === 'replace') {
             const group = await prisma.groups.update({
                 where: {
                     id: body['Operations'][0].value.id,
@@ -160,10 +200,10 @@ router.put('/:groupId', async (req, res) => {
                     name: body['Operations'][0].value.displayName,
                 },
             });
-            res.send(createSCIMGroup(group));
+            return res.send(createSCIMGroup(group));
         }
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        return res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
@@ -180,7 +220,7 @@ router.delete('/:groupId', async (req, res) => {
         });
         return res.status(204).send();
     } catch (error) {
-        res.status(500).send(createSCIMError('Something went wrong', 500));
+        res.status(500).send(createSCIMError(error.message, 500));
     }
 });
 
